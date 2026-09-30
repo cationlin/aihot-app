@@ -1,0 +1,53 @@
+# AIHOT ARM64 镜像 CI 构建工作流（Path C：远程构建，无需 N1 本地编译）
+# 用法：
+#   1) 在你的 GitHub 账号下建一个仓库（空仓库即可），把本文件放到 .github/workflows/build.yml
+#   2) 仓库 Settings → Actions → 允许；仓库 Settings → Packages 开启 ghcr 写权限（或用一个 packages:write 的 PAT 作为 secret GHCR_PAT）
+#   3) 点一次 Actions → Run workflow，约 5–10 分钟构建 linux/arm64 镜像并推到
+#        ghcr.io/<你的用户名>/aihot-app:latest
+#   4) 把 docker-compose.prebuilt.yml 里的 <YOUR_GHCR_REPO> 换成 ghcr.io/<你的用户名>，去 fnOS Docker 粘贴部署
+# 说明：构建上下文直接拉公开仓库 KKKKhazix/AIHOT；NPM_REGISTRY 用国内源加速。
+name: build-aihot-arm64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AIHOT (upstream, public)
+        uses: actions/checkout@v4
+        with:
+          repository: KKKKhazix/AIHOT
+          path: aihot
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./aihot
+          platforms: linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/aihot-app:latest
+          build-args: |
+            NPM_REGISTRY=https://registry.npmmirror.com
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
